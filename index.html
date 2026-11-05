@@ -77,12 +77,15 @@ header h1 b{color:var(--ac)}
  header .search-wrap{order:2;min-width:0;width:100%;flex:none}
  #q{min-height:43px;background:#fff;color:#172033;border:0;border-radius:12px;font-size:14px}
  #clearQ{color:#172033}
- header #locationSearchBtn{order:3;width:100%;min-height:40px;background:#7542a8!important}
+ header #headerTools{order:3;display:flex;gap:6px;width:100%;align-items:stretch} header #locationSearchBtn{flex:1;min-width:0;width:auto;min-height:38px;background:#7542a8!important} header #newSHBtn{flex:0 0 76px;min-width:76px;min-height:38px;padding:6px 8px;font-size:12px}
  header #toggle{display:none!important}
  header #zoneCheckBtn,header #saveHtmlBtn{min-height:38px}
  #wrap{display:flex;flex-direction:column;min-height:0;flex:1;overflow:hidden}
  #map{order:1;flex:1 1 72%;width:100%;min-height:240px;height:auto}
  #panel{order:2;position:relative;inset:auto;display:flex!important;width:100%;max-width:none;height:27%;max-height:30%;min-height:120px;border:0;border-top:1px solid var(--bd);border-radius:17px 17px 0 0;box-shadow:0 -3px 14px #0002;overflow:hidden}
+ #panel.address-list-open{height:55%;max-height:60%;min-height:45%}
+ #panel.address-list-open #body{overflow-y:auto}
+ #panel.address-list-open~#map{flex:1 1 45%}
  #bar{padding:8px 12px 6px;background:var(--card)}
  #bar:before{content:"";display:block;width:42px;height:4px;border-radius:8px;background:#aab1bc;margin:0 auto 8px}
  .tools{gap:7px}
@@ -111,7 +114,7 @@ header h1 b{color:var(--ac)}
 <header>
   
   <div class="search-wrap"><input id="q" type="text" placeholder="امسح أو اكتب رقم الشحنة" autocomplete="off" spellcheck="false"><button id="clearQ" type="button" title="مسح البحث" aria-label="مسح البحث">×</button></div>
-  <button class="btn" id="locationSearchBtn" type="button" style="background:#8e44ad">بحث لوكيشن</button>
+  <div id="headerTools"><button class="btn" id="locationSearchBtn" type="button" style="background:#8e44ad">بحث لوكيشن</button><button class="btn sec" id="newSHBtn" type="button" title="اختيار ملف شيت جديد">New SH</button></div>
   <button class="btn sec" id="toggle">الشيتات</button>
   <input id="f" type="file" accept=".xls,.xlsx,.xlsm" hidden>
   <button class="btn" id="zoneCheckBtn" type="button" style="background:#0f7b4f;display:none">✅ فحص الزون</button>
@@ -120,11 +123,7 @@ header h1 b{color:var(--ac)}
 <div id="wrap">
   <div id="panel">
     <div id="bar">
-      <div class="tools">
-        <button class="btn sec" id="all">الكل</button>
-        <button class="btn sec" id="none">ولا واحد</button>
-        <button class="btn sec edit-sheet" id="editSheet" type="button" title="اختيار أو تعديل ملف الشيت">تعديل الشيت</button>
-      </div>
+      <div class="tools"></div>
       <div class="mu" id="stat" style="display:none"></div>
     </div>
     <div id="body"></div>
@@ -372,7 +371,7 @@ function build(){
   if(data.depot) L.circleMarker([data.depot.la,data.depot.lo],{radius:13,color:"#ffd400",weight:4,fillColor:"#000",fillOpacity:1}).bindTooltip("DEX5 (المحطة)").addTo(depotLayer);
   applyLines(); fitAll(); refresh();
   var dt=data.at?new Date(data.at).toLocaleString("ar-EG",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"}):"";
-  document.getElementById("stat").textContent=rows.length+" شحنة · "+names.length+" شيت"+(data.ex.length?" · مستبعد "+data.ex.length+" برّه إسكندرية":"")+(dt?" · اتحفظ "+dt:"");
+  document.getElementById("stat").textContent="";
 }
 function fitAll(){
   var b=null; Object.keys(sheets).forEach(function(k){var s=sheets[k]; if(s.on&&s.bounds){b=b?b.extend(s.bounds):L.latLngBounds(s.bounds.getSouthWest(),s.bounds.getNorthEast())}});
@@ -383,27 +382,40 @@ function applyLines(){
 }
 function setOn(k,v){var s=sheets[k]; s.on=v; if(v) s.group.addTo(map); else map.removeLayer(s.group)}
 
-// تركيز على شيت واحد: الباقي يبهت وتظهر أرقام الـ stops
+// حالة اختيار الشيت: النقرة الأولى تركز على المكان دون إخفاء أي شيت، والثانية تبرز الشيت وحده
+var focusMode=false, sheetListOpen=false;
 function focus(k){
   typedLocationLayer.clearLayers();
   cur=k||null; detailLayer.clearLayers(); pinLayer.clearLayers();
   Object.keys(sheets).forEach(function(n){
-    var dim=cur&&n!==cur;
+    var dim=focusMode&&cur&&n!==cur;
     sheets[n].items.forEach(function(o){o.m.setStyle(dim?{fillOpacity:.12,opacity:.15}:{fillOpacity:.95,opacity:1})});
   });
   applyLines();
   if(!cur) return;
-  var s=sheets[cur]; if(!s.on) setOn(cur,true);
+  var s=sheets[cur];
+  if(!focusMode){if(s.bounds)map.fitBounds(s.bounds.pad(.15));return;} if(!s.on) setOn(cur,true);
   s.items.forEach(function(o){
     var l=o.rows, t=Math.min.apply(null,l.map(function(r){return r.s}))+(l.length>1?"+":"");
     L.marker([l[0].la,l[0].lo],{zIndexOffset:500,icon:L.divIcon({className:"",iconSize:[24,24],html:'<div class="num" style="background:'+s.color+'">'+t+'</div>'})})
       .bindPopup(popupHtml(l)).on("click",function(e){if(selCtrl(e))selToggle(l)}).addTo(detailLayer);
   });
-  L.polyline(s.line.getLatLngs(),{color:s.color,weight:3,opacity:.8,dashArray:"6 6"}).addTo(detailLayer);
   if(s.bounds) map.fitBounds(s.bounds.pad(.15));
+}
+function zoomToSheetAfterResize(k){
+  // اللوحة بتكبر فالخريطة بتصغر؛ لازم نعرّف Leaflet بالحجم الجديد قبل الزوم وإلا الزوم يطلع غلط
+  function go(){
+    try{map.invalidateSize({animate:false});}catch(e){}
+    focus(k);
+    var s=sheets[k]; if(s&&s.bounds) map.fitBounds(s.bounds.pad(.15),{animate:true,maxZoom:17});
+    var b=document.getElementById("body"); if(b) b.scrollTop=0;
+  }
+  go(); setTimeout(go,120); setTimeout(go,350);
 }
 function goTo(r){
   if(!r.ok) return;
+  pinLayer.clearLayers();
+  L.circleMarker([r.la,r.lo],{radius:15,color:"#fff",weight:4,fillColor:"#ff2d55",fillOpacity:1}).bindTooltip("الشحنة المحددة · "+esc(r.d)+" · stop "+r.s,{permanent:false}).addTo(pinLayer);
   if(sheets[r.d]&&!sheets[r.d].on) setOn(r.d,true);
   map.setView([r.la,r.lo],17);
   var hit=null; sheets[r.d].items.some(function(o){if(o.rows.indexOf(r)>-1){hit=o;return true}});
@@ -412,6 +424,11 @@ function goTo(r){
 }
 
 // ---------- اللوحة الجانبية ----------
+// كانت savedTag و saveAssignment مستدعاة ومش متعرّفة → أي قائمة عناوين كانت بتقع بخطأ. اتعرّفوا هنا بشكل آمن.
+var ASSIGN_KEY="alexmap_assignments_v1";
+function readAssignments(){try{return JSON.parse(localStorage.getItem(ASSIGN_KEY)||"{}")||{}}catch(e){return {}}}
+function saveAssignment(t,cat){try{var a=readAssignments();a[String(t)]=cat;localStorage.setItem(ASSIGN_KEY,JSON.stringify(a));return true}catch(e){return false}}
+function savedTag(t){var c=readAssignments()[String(t)];return c?'<span class="mu" style="margin-inline-start:6px;font-weight:700">['+esc(c)+']</span>':""}
 function rowHtml(r,extra){
   return '<div class="row" data-i="'+r.i+'"><div class="bdg">'+esc(r.d)+'</div><div class="ad">'+esc(r.a)+'<div class="tr">'+esc(r.t)+' · stop '+r.s+(extra||"")+'</div>'+savedTag(r.t)+'</div><a class="mp" target="_blank" rel="noopener" href="'+esc(mapsUrl(r))+'" title="خرائط جوجل">🗺️</a></div>';
 }
@@ -425,14 +442,17 @@ function renderSheets(){
   var h="";
   Object.keys(sheets).forEach(function(k){
     var s=sheets[k], np=s.rows.length-s.items.reduce(function(a,o){return a+o.rows.length},0);
-    h+='<div class="sh"><input type="checkbox" data-k="'+esc(k)+'"'+(s.on?" checked":"")+'><span class="dot" style="background:'+s.color+'"></span><span class="nm" data-z="'+esc(k)+'">'+esc(k)+'</span><span class="ct">'+s.rows.length+(np?" ("+np+" من غير موقع)":"")+'</span></div>';
+    h+='<div class="sh"><input type="checkbox" data-k="'+esc(k)+'"'+(s.on?" checked":"")+'><span class="dot" style="background:'+s.color+'"></span><span class="nm" data-z="'+esc(k)+'">'+esc(k)+'</span><button class="ct btn sec" type="button" data-z="'+esc(k)+'" data-open-list="1" title="عرض عناوين الشحنات" style="cursor:pointer;padding:2px 7px;min-height:25px">Address</button></div>';
   });
   return h+exclHtml();
 }
 function renderSheet(k){
-  var s=sheets[k];
-  var h='<button class="btn sec" id="back">‹ كل الشيتات</button><div class="card"><div class="big" style="color:'+s.color+'">'+esc(k)+'</div><div class="mu">'+s.rows.length+' عنوان · دوس على أي عنوان يقرّب عليه في الخريطة</div></div>';
-  s.rows.forEach(function(r){h+=rowHtml(r)});
+  var sh=sheets[k];
+  var h='<div style="display:flex;gap:6px;align-items:center;margin:2px 0 7px;flex-wrap:wrap"><button class="btn sec" id="back" style="padding:5px 8px;min-height:30px">‹ كل الشيتات</button><b style="color:'+sh.color+';flex:1">'+esc(k)+'</b><button class="btn" id="showAllSheets" type="button" style="padding:5px 10px;min-height:30px">الكل</button><button class="btn sec" id="showNoneSheets" type="button" style="padding:5px 10px;min-height:30px">ولا واحد</button></div>';
+  h+='<div class="mu" style="margin:3px 0 6px">شحنات '+esc(k)+' مرتبة حسب رقم الـ stop. اضغط على أي شحنة لتحديد موقعها على الخريطة.</div>';
+  h+='<div id="sheetShipmentsList" style="max-height:42vh;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--bd);border-radius:9px;padding:3px">';
+  sh.rows.forEach(function(r){h+=rowHtml(r)});
+  h+='</div>';
   return h;
 }
 function coordSearch(raw){
@@ -702,6 +722,22 @@ function refresh(){
   body.scrollTop=0;
 }
 
+
+// دعم زر الرجوع في Android: يتراجع داخل حالة الشيت ثم يرجع للخريطة الكاملة
+(function(){
+  var stateStamp="alex-map-state";
+  function pushAppState(){try{history.pushState({appMap:stateStamp,cur:cur,focusMode:focusMode,list:sheetListOpen,panel:document.getElementById("panel").classList.contains("open")},"")}catch(e){}}
+  window.addEventListener("popstate",function(){
+    if(sheetListOpen){sheetListOpen=false;refresh();pushAppState();return;}
+    if(focusMode){focusMode=false;sheetListOpen=false;focus(cur);refresh();pushAppState();return;}
+    if(cur){cur=null;focusMode=false;sheetListOpen=false;focus(null);refresh();fitAll();pushAppState();return;}
+    if(document.getElementById("panel").classList.contains("open")){document.getElementById("panel").classList.remove("open");pushAppState();return;}
+    if(document.getElementById("q").value){document.getElementById("q").value="";pinLayer.clearLayers();refresh();fitAll();pushAppState();return;}
+  });
+  document.addEventListener("click",function(e){if(e.target.closest("[data-z],#sheetListToggle,#back,#toggle"))pushAppState();});
+  try{history.replaceState({appMap:stateStamp},"");pushAppState()}catch(e){}
+})();
+
 // ---------- الأحداث ----------
 var body=document.getElementById("body");
 body.addEventListener("change",function(e){
@@ -722,9 +758,12 @@ body.addEventListener("click",function(e){
     alert("تم حفظ "+savedCount+" شحنة تحت "+cat.value+(failedCount?"، وفشل حفظ "+failedCount+" شحنة بسبب مساحة التخزين.":"."));
     refresh();return;
   }
+  if(e.target.closest("#showAllSheets")){setAll(true);return}
+  if(e.target.closest("#showNoneSheets")){setNoneExceptCurrent();return}
+  if(e.target.closest("#sheetListToggle")){sheetListOpen=!sheetListOpen;refresh();return}
   var z=e.target.closest("[data-z]");
-  if(z){ document.getElementById("q").value=""; pinLayer.clearLayers(); focus(z.getAttribute("data-z")); refresh(); return }
-  if(e.target.closest("#back")){ focus(null); refresh(); fitAll(); return }
+  if(z){ var key=z.getAttribute("data-z"); document.getElementById("q").value=""; pinLayer.clearLayers(); if(z.hasAttribute("data-open-list")){cur=key;focusMode=true;sheetListOpen=true;document.getElementById("panel").classList.add("open","address-list-open");refresh();zoomToSheetAfterResize(key);return;}else{document.getElementById("panel").classList.remove("address-list-open");if(cur===key){focusMode=!focusMode;sheetListOpen=focusMode;}else{cur=key;focusMode=false;sheetListOpen=false;}} focus(key); refresh(); return }
+  if(e.target.closest("#back")){ document.getElementById("panel").classList.remove("address-list-open");focus(null);cur=null;focusMode=false;sheetListOpen=false; refresh(); setTimeout(function(){try{map.invalidateSize({animate:false})}catch(e){}fitAll()},60); return }
   if(e.target.closest("a")) return;
   var row=e.target.closest(".row[data-i]"); if(row) goTo(rows[+row.getAttribute("data-i")]);
 });
@@ -737,13 +776,24 @@ document.getElementById("q").addEventListener("input",function(){
 });
 document.getElementById("clearQ").addEventListener("click",function(){
   var q=document.getElementById("q");q.value="";pinLayer.clearLayers();
-  if(cur)focus(null);refresh();fitAll();q.focus();
+  if(cur)focus(null);cur=null;focusMode=false;sheetListOpen=false;typedLocationLayer.clearLayers();refresh();fitAll();q.focus();
 });
-function setAll(v){Object.keys(sheets).forEach(function(k){setOn(k,v)});applyLines();refresh()}
-document.getElementById("all").onclick=function(){setAll(true)};
-document.getElementById("none").onclick=function(){setAll(false)};
+function setAll(v){
+  Object.keys(sheets).forEach(function(k){setOn(k,v)});
+  focusMode=false;
+  Object.keys(sheets).forEach(function(n){sheets[n].items.forEach(function(o){o.m.setStyle({fillOpacity:.95,opacity:1})})});
+  applyLines();refresh();
+}
+function setNoneExceptCurrent(){
+  Object.keys(sheets).forEach(function(k){setOn(k,k===cur)});
+  focusMode=!!cur;
+  if(cur)focus(cur);else Object.keys(sheets).forEach(function(n){sheets[n].items.forEach(function(o){o.m.setStyle({fillOpacity:.12,opacity:.15})})});
+  applyLines();refresh();
+}
+try{new ResizeObserver(function(){try{map.invalidateSize({animate:false})}catch(e){}}).observe(document.getElementById("map"))}catch(e){}
 document.getElementById("toggle").onclick=function(){document.getElementById("panel").classList.toggle("open")};
-document.getElementById("editSheet").onclick=function(){document.getElementById("f").click()};
+
+document.getElementById("newSHBtn").onclick=function(){document.getElementById("f").click()};
 
 body.addEventListener("change",function(e){
   if(e.target&&e.target.classList.contains("dex9-check")){
