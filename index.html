@@ -109,6 +109,10 @@ header h1 b{color:var(--ac)}
 @media(min-width:701px){#drop .box{max-width:480px}}
 
 </style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1459b8">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <header>
@@ -1590,5 +1594,6 @@ document.addEventListener("click",function(e){
   else if(b.id==="zX")zHideBar();else if(b.id==="zRefresh")zOpen();else if(b.id==="zExport")zExport();else if(b.id==="zAuto")zAuto();
 });
 </script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
 </body>
 </html>
